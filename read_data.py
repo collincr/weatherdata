@@ -1,6 +1,15 @@
+import collections
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+StationInfo = collections.namedtuple("StationInfo",
+                                     ["lat", "lon", "elev", "name"])
+
+def latlon_converter(x):
+    if x == 'unknown':
+        return np.NaN
+    return float(x)
 
 fname = "data/sonoma.csv"
 
@@ -13,8 +22,13 @@ for ix, gr in df_grouped:
     groups.append(gr)
 
 hpcp = {}
+hpcp_info = {}
+
 
 for data in groups:
+
+    key = data["STATION"].iloc[0]
+
     missing_periods=[]
     deleted_periods=[]
     accum_periods=[]
@@ -59,6 +73,13 @@ for data in groups:
 
     precip_h = data["HPCP"].resample("H").sum().fillna(0)
 
+    lat = np.nanmean(map(latlon_converter, np.unique(data["LATITUDE"])))
+    lon = np.nanmean(map(latlon_converter, np.unique(data["LONGITUDE"])))
+    elev = np.nanmean(map(latlon_converter, np.unique(data["ELEVATION"])))
+    name = data["STATION_NAME"].iloc[0]
+
+    hpcp_info[key] = StationInfo(lat=lat, lon=lon, elev=elev, name=name)
+
     for start, end in missing_periods:
         precip_h.loc[start:end] = np.NaN
     for start, end in deleted_periods:
@@ -73,8 +94,13 @@ for data in groups:
                                 (data["Quality Flag"]=="q"))[0]]
     precip_h.loc[qf_ix] = np.NaN
 
-    hpcp[data["STATION"].iloc[0]] = precip_h
+    hpcp[key] = precip_h
 
 df_qc = pd.concat(hpcp, axis=1)
 
 df_qc.to_csv("sonoma_qc.csv")
+
+station_data = pd.DataFrame.from_records(hpcp_info,
+                                         index=StationInfo._fields).T
+
+station_data.to_csv("sonoma_info.csv")
